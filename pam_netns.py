@@ -62,12 +62,17 @@ def pam_sm_open_session(pamh, flags, argv):
             critical("couldn't get user from PAM")
             return pamh.PAM_SESSION_ERR
     
-        if username in user_mapping:
+        if username in user_mapping and username != "root":
             ns = user_mapping[username]
             if netns_switch_by_name(ns) < 0:
                 return pamh.PAM_SESSION_ERR
             
             info("succesfully changed network namespace to \"%s\"" % ns)
+        else:
+            if netns_switch_by_path("/proc/1/ns/net") < 0:
+                return pamh.PAM_SESSION_ERR
+            
+            info("succesfully changed network namespace to default")
 
         return pamh.PAM_SUCCESS
  
@@ -98,14 +103,14 @@ def netns_switch_by_path(path):
         f = open(path, "r")
         
     except Exception as e:
-        critical("cannot open network namespace in \"%s\": %s" % (name, str(e)))
+        critical("cannot open network namespace in \"%s\": %s" % (path, str(e)))
         return -1
 
     try:
         fd = f.fileno()
         err = libc.setns(fd, CLONE_NEWNET)
         if err < 0:
-            critical("setting the network namespace \"%s\" failed: %s" % (name ,err))
+            critical("setting the network namespace \"%s\" failed: %s" % (path ,err))
             return -1
 
         # should unshare mount namespace?
